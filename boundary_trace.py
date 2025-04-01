@@ -142,7 +142,7 @@ def process_image_boundary(image_path):
     if img is None:
         print(f"无法读取图像: {image_path}")
         return None, None
-    
+
     # 转换为HSV颜色空间
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     
@@ -207,3 +207,80 @@ def process_image_boundary(image_path):
     cv2.arrowedLine(result_img, center_point, end_point, (255, 0, 0), 2)
     
     return result_img, direction
+
+def process_image_boundary_for_Control(img):
+    """
+    使用边界线方法处理图像并确定小车的最佳行驶方向。
+    
+    处理步骤：
+    1. 读取图像并转换为HSV颜色空间
+    2. 使用颜色阈值分割出轨道区域
+    3. 应用形态学操作减少噪声
+    4. 检测左右边界线
+    5. 计算小车（图像中心）到边界线的距离
+    6. 根据距离比例确定行驶方向
+    7. 在图像上绘制可视化结果
+    
+    参数：
+        image_path: str，输入图像
+        
+    返回：
+        tuple: (result_img, direction) 或 (None, None)
+            - result_img: numpy.ndarray，带有边界线和方向指示的结果图像
+            - direction: float，最佳行驶方向（0-360度）
+            - 如果处理失败，返回(None, None)
+    """
+    # 读取图像
+    if img is None:
+        print(f"无法读取图像: {img}")
+        return None, None
+        
+    # 应用高斯模糊处理，使用较大的内核融合相似颜色色块
+    blurred = cv2.GaussianBlur(img, (15, 15), 0)
+
+    # 转换为HSV颜色空间
+    hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+    
+    # 定义轨道颜色的HSV范围（默认适用于棕色/黄褐色轨道）
+    # H: 10-30 (色调，棕色/黄褐色范围)
+    # S: 50-255 (饱和度，排除灰白色)
+    # V: 50-255 (亮度，排除过暗区域)
+    lower_track = np.array([10, 50, 50])
+    upper_track = np.array([30, 255, 255])
+    
+    # 创建轨道的掩码
+    track_mask = cv2.inRange(hsv, lower_track, upper_track)
+    
+    # 应用形态学操作来减少噪声
+    kernel = np.ones((5, 5), np.uint8)
+    track_mask = cv2.morphologyEx(track_mask, cv2.MORPH_OPEN, kernel)
+    track_mask = cv2.morphologyEx(track_mask, cv2.MORPH_CLOSE, kernel)
+    
+    # 找出边界线
+    boundaries = find_track_boundaries(track_mask)
+    if boundaries is None:
+        print("未能检测到足够的边界线")
+        return None
+    
+    left_boundary, right_boundary = boundaries
+    
+    # 图像中心点（假设小车在图像中心）
+    height, width = img.shape[:2]
+    center_point = (width // 2, height // 2)
+    
+    # 计算到两条边界线的距离
+    d1 = calculate_perpendicular_distance(center_point, left_boundary)
+    d2 = calculate_perpendicular_distance(center_point, right_boundary)
+    
+    # 根据距离比例决定行进方向
+    if 0.8 * d2 <= d1 <= 1.3 * d2:
+        # 距离相近，沿着垂直方向行驶
+        direction = calculate_direction(center_point, left_boundary, right_boundary)
+    else:
+        # 距离相差较大，需要先调整位置
+        # 计算到边界线的垂点连线方向
+        direction = calculate_direction(center_point, left_boundary, right_boundary)
+        if d1 > d2:
+            direction = (direction + 180) % 360  # 反向
+    
+    return direction

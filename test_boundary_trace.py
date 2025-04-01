@@ -5,7 +5,7 @@ import argparse
 import os
 from boundary_trace import process_image_boundary
 
-def test_with_image(image_path, save_result=True):
+def test_with_image(image_path, save_result=False):
     """
     使用指定图像测试边界线导航算法。
     

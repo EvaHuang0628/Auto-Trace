@@ -45,6 +45,44 @@ def process_image(image_path):
     # 分析轨道方向
     return analyze_track_direction(track_mask, center_x, center_y, img)
 
+def process_image_for_Control(img):
+    # 读取图像
+    if img is None:
+        print(f"无法读取图像: {image_path}")
+        return None
+    
+    # 转换为HSV颜色空间，更容易进行颜色分割
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    
+    # 定义轨道颜色的HSV范围（需要根据实际轨道颜色调整）
+    # 这里假设轨道是棕色/黄褐色
+    lower_track = np.array([4, 171, 90])
+    upper_track = np.array([24, 255, 255])
+    
+    # 创建轨道的掩码
+    track_mask = cv2.inRange(hsv, lower_track, upper_track)
+    
+    # 应用形态学操作来减少噪声
+    kernel = np.ones((5, 5), np.uint8)
+    track_mask = cv2.morphologyEx(track_mask, cv2.MORPH_OPEN, kernel)
+    track_mask = cv2.morphologyEx(track_mask, cv2.MORPH_CLOSE, kernel)
+    
+    # 获取轨道区域
+    track = cv2.bitwise_and(img, img, mask=track_mask)
+    
+    # 图像中心点（假设小车在图像中心）
+    height, width = img.shape[:2]
+    center_x, center_y = width // 2, height // 2
+    
+    # 检查小车是否脱轨
+    center_region = track_mask[center_y-20:center_y+20, center_x-20:center_x+20]
+    if np.sum(center_region) == 0:
+        print("检测到小车脱轨！计算返回轨道的最短路径...")
+        return find_shortest_path_to_track(track_mask, center_x, center_y, img)
+    
+    # 分析轨道方向
+    return analyze_track_direction(track_mask, center_x, center_y, img)
+
 def find_shortest_path_to_track(track_mask, center_x, center_y, img):
     """
     当小车脱轨时，计算返回轨道的最短路径
@@ -184,6 +222,7 @@ def analyze_track_direction(track_mask, center_x, center_y, img):
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
     
     return result_img, best_angle
+
 
 def create_line_points(x1, y1, x2, y2):
     """
